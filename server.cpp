@@ -1,32 +1,28 @@
-#include <iostream>
-#include <string>
+#include<iostream>
+#include <thread>
+#include <chrono>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <server_cl.hpp>
+#include <client_cl.hpp>
+#include <csignal>
 #include <vector>
 
-std::vector<int> seq_generator(int start, int step) {
-    std::vector<int> seqs;
-    seqs.emplace_back(start);
-    for (int i = 0; i < 4; ++i) {
-        seqs.emplace_back(start + step);
-        start += step;
-    }
-    return seqs;
+static volatile sig_atomic_t flag = 0;
+
+void signal_handler(int signum) {
+    flag = 1;
 }
 
-std::string build_msg (const std::vector<std::vector<int>>& seqs) {
-    std::string msg;
-    for (int i = 0; i < 5; ++i) {
-        for (int j = 0; j < seqs.size(); ++j) {
-            msg += std::to_string(seqs[j][i]) + " ";
-        }
-        msg+= "\n";
-    }
-    return msg;
-}
+struct seq {
+    int start;
+    int step;
+
+    seq(int start, int step) : start(start), step(step) {}
+};
 
 std::vector<std::string> split_strs(const std::string &str) {
     std::vector<std::string> res;
@@ -45,32 +41,17 @@ std::vector<std::string> split_strs(const std::string &str) {
     return res;
 }
 
-struct seq {
-    int start;
-    int step;
-
-    seq(int start, int step) : start(start), step(step) {}
-};
-
-std::vector<seq> split_seqs(const std::vector<std::string> &strs) {
-    std::vector<seq> data;
-
-    for (auto &s: strs) {
-        data.emplace_back(std::stoi(s.substr(s.find_first_of(' ') + 1, s.find_last_of(' '))),
-                          std::stoi(s.substr(s.find_last_of(' ') + 1)));
-    }
-
-    return data;
-}
-
 int main(int argc, char *argv[]) {
+
     if (argc != 2) {
         std::cerr << "Usage: port" << std::endl;
         exit(0);
     }
-    int port = atoi(argv[1]);
-
     char msg[2000];
+    int port = std::atoi(argv[1]);
+    signal(SIGINT, signal_handler);
+    server server;
+    server.open_server();
 
     sockaddr_in servAddr;
     servAddr.sin_family = AF_INET;
@@ -78,50 +59,65 @@ int main(int argc, char *argv[]) {
     servAddr.sin_port = htons(port);
     socklen_t size = sizeof(servAddr);
 
-    int serverSd = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSd < 0) {
-        std::cerr << "Error establishing the server socket" << std::endl;
+    int bind_status = bind(server.listening_socket, reinterpret_cast<struct sockaddr *>(&servAddr), size);
+    if (bind_status < 0) {
+        std::cerr << "Error binding socket to local address!" << std::endl;
         exit(0);
     }
 
-    int bindStatus = bind(serverSd, reinterpret_cast<struct sockaddr *>(&servAddr), sizeof(servAddr));
-    if (bindStatus < 0) {
-        std::cerr << "Error binding socket to local address" << std::endl;
-        exit(0);
-    }
-    listen(serverSd, 1);
+    listen(server.listening_socket, 1);
 
-    int newSd = accept(serverSd, reinterpret_cast<struct sockaddr *>(&servAddr), &size);
-    if (newSd < 0) {
+    server.server_socket = accept(server.listening_socket, reinterpret_cast<struct sockaddr *>(&servAddr), &size);
+    if (server.server_socket < 0) {
         std::cerr << "Error accepting request from client!" << std::endl;
         exit(1);
     }
+
     std::cout << "Connected with client!" << std::endl;
+    std::cout << "Awaiting response from a client..." << std::endl;
 
-    std::cout << "Awaiting client response..." << std::endl;
     memset(&msg, 0, sizeof(msg));
-    recv(newSd, reinterpret_cast<char *>(&msg), sizeof(msg), 0);
-    std::cout << "Client: " << msg << std::endl;
+    recv(server.server_socket, reinterpret_cast<char *>(&msg), sizeof(msg), 0);
+    // got sequences
 
-    std::string msg_s(msg);
-    std::vector<std::string> strs = split_strs(msg_s);
-    std::vector<seq> data = split_seqs(strs);
-    std::vector<std::vector<int>> seqs;
-    for (auto& i : data) {
-        seqs.emplace_back(seq_generator(i.start,i.step));
+    std::vector<seq> start_step_vec;
+
+    std::string s = msg;
+    std::vector<std::string> strings = split_strs(s);
+
+    for (auto &i: strings) {
+        start_step_vec.emplace_back(std::stoi(i.substr(i.find_first_of(' ') + 1, i.find_last_of(' '))),
+                                    std::stoi(i.substr(i.find_last_of(' ') + 1)));
     }
 
     memset(&msg, 0, sizeof(msg));
 
-    msg_s = build_msg(seqs);
+    for (auto &i: start_step_vec) {
+        strcat(msg, (std::to_string(i.start) + " ").c_str());
+    }
+    send(server.server_socket, reinterpret_cast<char *>(&msg), strlen(msg), 0);
+    //sent the first element
+    const char *buf = "+";
+    while (true) {
+        if (recv(server.server_socket, reinterpret_cast<char *>(&buf), strlen(msg), 0) <= 0) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::string tmp;
+        for (auto &i: start_step_vec) {
+            tmp += std::to_string(i.start + i.step) + " ";
+            i.start += i.step;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        memset(&msg, 0, sizeof(msg));
+        strcat(msg, tmp.c_str());
+        send(server.server_socket, reinterpret_cast<char *>(&msg), strlen(msg), 0);
+    }
+    for (int i = 0; i < 5; ++i) {
+        std::cout << "Waiting for other clients to connect...\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    }
+    server.close_server();
 
-    strcpy(msg,msg_s.c_str());
-
-    send(newSd, reinterpret_cast<char *>(&msg), strlen(msg), 0);
-    std::cout << "Data was sent to the client\n";
-
-    close(newSd);
-    close(serverSd);
-    std::cout << "Connection closed..." << std::endl;
     return 0;
 }
