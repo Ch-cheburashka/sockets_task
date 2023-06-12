@@ -47,13 +47,13 @@ int main(int argc, char *argv[]) {
         std::cerr << "Usage: port" << std::endl;
         exit(0);
     }
-    char msg[2000];
+    char msg[2000]; // Вот это можно перенести в класс сервера. Это типа буфер сообщений приходящих
     int port = std::atoi(argv[1]);
     signal(SIGINT, signal_handler);
     server server;
     server.open_server();
 
-    sockaddr_in servAddr;
+    sockaddr_in servAddr{};
     servAddr.sin_family = AF_INET;
     servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servAddr.sin_port = htons(port);
