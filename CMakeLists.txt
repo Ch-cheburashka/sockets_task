@@ -4,31 +4,51 @@ project(sockets_task)
 set(CMAKE_CXX_STANDARD 17)
 
 add_library(
-        server_cl
-        sources/server_cl.cpp
+        server
+        sources/server.cpp
 )
 
 add_library(
-        client_cl
-        sources/client_cl.cpp
+        client
+        sources/client.cpp
 )
 
-target_include_directories(server_cl PUBLIC
+add_library(
+        tcp_client
+        sources/tcp_client.cpp
+)
+
+target_include_directories(server PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+        )
+
+target_include_directories(tcp_client PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
         )
 
 
-
-target_include_directories(client_cl PUBLIC
+target_include_directories(client PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
         )
 
-add_executable(main_server server.cpp)
-add_executable(main_client client.cpp)
+add_library(i_client INTERFACE)
 
-target_link_libraries(main_server server_cl)
-target_link_libraries(main_client server_cl)
-target_link_libraries(main_server client_cl)
-target_link_libraries(main_client client_cl)
+target_include_directories(i_client INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+        )
+
+add_executable(cli_server cli/cli_server.cpp)
+add_executable(cli_client cli/cli_client.cpp)
+
+target_link_libraries(cli_server server)
+target_link_libraries(cli_client client)
+
+target_link_libraries(cli_client tcp_client)
+target_link_libraries(cli_server tcp_client)
+
+target_link_libraries(client i_client)
+target_link_libraries(server i_client)
