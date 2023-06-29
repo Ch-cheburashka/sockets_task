@@ -3,43 +3,6 @@
 #include <chrono>
 #include <string>
 #include "server.hpp"
-#include <vector>
-
-
-struct seq {
-    int start;
-    int step;
-
-    seq(int start, int step) : start(start), step(step) {}
-};
-
-std::vector<std::string> split_strs(const std::string &str) {
-    std::vector<std::string> res;
-    std::string cur;
-    for (auto &i: str) {
-        if (i == '\n') {
-            res.emplace_back(cur);
-            cur.clear();
-            continue;
-        }
-        cur += i;
-    }
-    if (!cur.empty()) {
-        res.emplace_back(cur);
-    }
-    return res;
-}
-
-std::vector<seq> build_seqs(const std::string &s) {
-    std::vector<seq> start_step_vec;
-    std::vector<std::string> strings = split_strs(s);
-    for (auto &i: strings) {
-        start_step_vec.emplace_back(
-                std::stoi(i.substr(i.find_first_of(' ') + 1, i.find(' ', i.find_first_of(' ') + 1))),
-                std::stoi(i.substr(i.find(' ', i.find_first_of(' ') + 1) + 1, i.find_last_of(' '))));
-    }
-    return start_step_vec;
-}
 
 int main(int argc, char *argv[]) {
 
@@ -48,42 +11,50 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-    server server(std::stoi(argv[1]));
+    server server(std::stoi(argv[1])); // constructed the server from a port (with a default socket initialization)
+
     std::cout << "Sdravia zhelayu!\n";
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    server._connect();
+    server._connect(); // creating addr, binding to addr, listening and accepting client
+
     std::cout << "\nClient connected :)\n";
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    server.receive_message();
-    std::vector<seq> start_step_vec = build_seqs(server.buffer);
+    server.receive_message(); // receiving sequences
+
+    server.create_start_step_vec(server.buffer); // creating a vector with start positions and steps
+
     std::string result;
-    for (auto &i: start_step_vec) {
-        result += std::to_string(i.start) + " ";
+    for (auto &i: server.start_step_vec) {
+        result += std::to_string(i.start) + " "; // creating first elements of sequences
     }
-    server.send_message(result); // sent first elements
+
+    server.send_message(result);// sent first elements
+
     std::cout << "...processing...\n";
+
     while (true) {
-        if (!server.receive_message()) {
+        if (!server.receive_message()) { // checking if client isn't dead
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         result.clear();
-        for (auto &i: start_step_vec) {
-            result += std::to_string(i.start + i.step) + " ";
+        for (auto &i: server.start_step_vec) {
+            result += std::to_string(i.start + i.step) + " ";  // increasing each element by its step
             i.start += i.step;
         }
-        server.send_message(result);
-        memset(&server.buffer, 0, sizeof(server.buffer));
+        server.send_message(result); // sending increased elements
     }
 
     std::cout << "\nWaiting for other clients to connect...\n";
     std::this_thread::sleep_for(std::chrono::milliseconds(8000));
-    server._disconnect();
+
+    server._disconnect(); // closing all the server sockets
 
     std::cout << "\nYa ustal zhdat.\n";
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     std::cout << "Gute Nacht!\n";
+
     exit(0);
 }

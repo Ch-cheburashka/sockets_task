@@ -6,6 +6,24 @@
 #include <unistd.h>
 #include <iostream>
 
+
+std::vector<std::string> split_strs(const std::string &str) {
+    std::vector<std::string> res;
+    std::string cur;
+    for (auto &i: str) {
+        if (i == '\n') {
+            res.emplace_back(cur);
+            cur.clear();
+            continue;
+        }
+        cur += i;
+    }
+    if (!cur.empty()) {
+        res.emplace_back(cur);
+    }
+    return res;
+}
+
 server::server(int port, int socket_domain, int type, int protocol) : port(port), listening_socket(
         socket(socket_domain, type, protocol)) {}
 
@@ -50,6 +68,15 @@ bool server::receive_message() {
         return false;
     strcpy(buffer,  received_buf);
     return true;
+}
+
+void server::create_start_step_vec(const std::string &s) {
+    std::vector<std::string> strings = split_strs(s);
+    for (auto &i: strings) {
+        start_step_vec.emplace_back(
+                std::stoi(i.substr(i.find_first_of(' ') + 1, i.find(' ', i.find_first_of(' ') + 1))),
+                std::stoi(i.substr(i.find(' ', i.find_first_of(' ') + 1) + 1, i.find_last_of(' '))));
+    }
 }
 
 

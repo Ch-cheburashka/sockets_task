@@ -21,7 +21,6 @@ void client::_disconnect() {
 }
 
 
-
 void client::send_message(const std::string& s) {
     memset(&buffer, 0, sizeof(buffer));
     strcpy(buffer,s.c_str());
