@@ -42,7 +42,7 @@ target_include_directories(i_client INTERFACE
         )
 
 add_executable(cli_server cli/cli_server.cpp)
-add_executable(cli_client cli/cli_client.cpp)
+add_executable(cli_client include/utils.hpp include/i_client.h sources/tcp_client.cpp include/tcp_client.h sources/client.cpp include/client.h cli/cli_client.cpp)
 
 target_link_libraries(cli_server server)
 target_link_libraries(cli_client client)
