@@ -1,57 +1,28 @@
-#include <iostream>
-#include <string>
-#include <csignal>
-#include <thread>
-#include <chrono>
-#include <client.hpp>
-static volatile sig_atomic_t flag = 0;
+#include <client.h>
+#include "exceptions.hpp"
 
-void signal_handler( int signum ) {
-    flag = 1;
-}
-
-int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        std::cerr << "Usage: port" << std::endl;
-        exit(0);
+//
+// Created by mrmamongo on 12.07.23.
+//
+int main() {
+    try {
+        client cl{};
+        cl.connect("127.0.0.1", 9998);
+        std::string message = "Hello, server!";
+        cl.send(message);
+        std::string response = cl.receive();
+        std::cout << "Server response: " << response << std::endl;
+        cl.close();
+        return 0;
+    } catch (const send_exception& ex) {
+        std::cout << "Send exception occurred: " << ex.what() << std::endl;
+        return 1;
+    } catch (const connection_exception& ex) {
+        std::cout << "Connection exception occurred: " << ex.what() << std::endl;
+        return 1;
+    } catch (const std::exception& ex) {
+        std::cout << "Exception occurred: " << ex.what() << std::endl;
+        return 1;
     }
 
-    signal(SIGINT, signal_handler);
-
-    client client(std::stoi(argv[1])); // constructed client from port (with a default socket initialization)
-
-    client._connect(); // creating addr, connecting to server
-
-    std::cout << "Connected to server :) \n";
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(700));
-
-    std::cout << "Enter seqs bistra :  ";
-    client.send_message(client::read_seqs()); // created and sent a string with entered sequences
-
-    client.receive_message(); // received first elements of sequences
-    std::cout << client.buffer << "\n";
-
-    const std::string pilus = "+"; // pilus to inform the server that the client is alive
-
-    while (true) {
-        if (flag == 1) {
-            break;
-        }
-
-        client.send_message(pilus); // sent pilus
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
-        client.receive_message(); // received increased elements
-        std::cout << client.buffer << "\n";
-    }
-
-    client._disconnect(); // closing the client socket
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-
-    std::cout << "Spoki noki!\n";
-    exit(0);
-
 }
-
